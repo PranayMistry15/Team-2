@@ -1,0 +1,28 @@
+RewriteEngine On
+
+# added rules for path referencing
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteCond %{THE_REQUEST} \s/+laptro-ecommerce/pages/([A-Za-z0-9_\-]+\.php) [NC]
+RewriteRule ^pages/%1 %1 [R=302,L]
+RewriteRule ^([A-Za-z0-9_\-]+\.php)$ pages/$1 [L]
+RewriteRule ^$ pages/index.php [L]
+ErrorDocument 404 /laptro-ecommerce/pages/404.php
+
+# compression/optimization
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/plain text/html text/xml text/css text/javascript application/javascript application/json application/xml
+</IfModule>
+
+# cache static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/gif "access plus 30 days"
+</IfModule>
