@@ -1,6 +1,8 @@
 <?php
 $pageTitle = 'Manage Customers - Admin';
-require_once '../includes/header.php';
+require_once '../includes/config.php';
+require_once '../includes/functions.php';
+require_once '../includes/url-helper.php';
 
 // Check admin access
 if (!isAdmin()) {
@@ -10,6 +12,17 @@ if (!isAdmin()) {
 
  // Connection
 $conn = getDBConnection();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_customer'])) {
+    verify_csrf_or_abort();
+    $customerId = (int)($_POST['customer_id'] ?? 0);
+    if ($customerId > 0) {
+        $stmt = $conn->prepare("DELETE FROM users WHERE id = ? AND is_admin = 0");
+        $stmt->execute([$customerId]);
+        setFlash('success', 'Customer deleted successfully.');
+    }
+    redirect(url('admin/customers.php'));
+}
 
 // Filters
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
@@ -37,6 +50,7 @@ $stmt = $conn->prepare("SELECT u.*, COUNT(o.id) AS total_orders, SUM(o.total_amo
 $stmt->execute($params);
 $customers = $stmt->fetchAll();
 
+require_once '../includes/header.php';
 ?>
 <aside class="admin-sidebar">
   <div class="text-center ">
@@ -45,9 +59,12 @@ $customers = $stmt->fetchAll();
     <nav class="nav flex-column" aria-label="Admin sidebar">
         <a class="nav-link" href="<?php echo url('admin/index.php'); ?>"><i class="fas fa-home me-2"></i>Dashboard</a>
         <a class="nav-link" href="<?php echo url('admin/products.php'); ?>"><i class="fas fa-laptop me-2"></i>Products</a>
+        <a class="nav-link" href="<?php echo url('admin/stock-receipts.php'); ?>"><i class="fas fa-boxes-stacked me-2"></i>Stock In</a>
+        <a class="nav-link" href="<?php echo url('admin/inventory-reports.php'); ?>"><i class="fas fa-chart-column me-2"></i>Reports</a>
         <a class="nav-link" href="<?php echo url('admin/orders.php'); ?>"><i class="fas fa-shopping-bag me-2"></i>Orders</a>
         <a class="nav-link active" href="<?php echo url('admin/customers.php'); ?>"><i class="fas fa-users me-2"></i>Customers</a>
         <a class="nav-link" href="<?php echo url('admin/returns.php'); ?>"><i class="fas fa-undo me-2"></i>Returns</a>
+        <a class="nav-link" href="<?php echo url('admin/assistance.php'); ?>"><i class="fas fa-headset me-2"></i>Assistance</a>
          <hr style="border-color: #666;">
         <a class="nav-link" href="<?php echo url('index.php'); ?>"><i class="fas fa-globe me-2"></i>View Site</a>
         <a class="nav-link" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Logout</a>
@@ -55,7 +72,10 @@ $customers = $stmt->fetchAll();
  </aside>
 
 <main class="admin-main">
-    <h1 class="mb-4">Customer Management</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Customer Management</h1>
+        <a href="<?php echo url('admin/customer-form.php'); ?>" class="btn btn-primary"><i class="fas fa-user-plus me-2"></i>Add Customer</a>
+    </div>
     <form class="d-flex gap-2 mb-3" method="GET" action="<?php echo url('admin/customers.php'); ?>" role="search" aria-label="Search customers">
         <label for="q" class="visually-hidden">Search</label>
         <input id="q" name="q" class="form-control" placeholder="Name or email" value="<?php echo htmlspecialchars($q); ?>">
@@ -68,23 +88,37 @@ $customers = $stmt->fetchAll();
                     <th>ID</th>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Phone</th>
                     <th>Registered</th>
                     <th>Total Orders</th>
                     <th>Total Spent</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (!$customers): ?>
-                    <tr><td colspan="6" class="text-center text-muted">No customers found</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted">No customers found</td></tr>
                 <?php endif; ?>
                 <?php foreach ($customers as $customer): ?>
                     <tr>
                         <td><?php echo $customer['id']; ?></td>
                         <td><strong><?php echo htmlspecialchars($customer['name']); ?></strong></td>
                         <td><?php echo htmlspecialchars($customer['email']); ?></td>
+                        <td><?php echo htmlspecialchars($customer['phone'] ?? ''); ?></td>
                         <td><?php echo date('M d, Y', strtotime($customer['created_at'])); ?></td>
                         <td><?php echo $customer['total_orders'] ?? 0; ?></td>
                         <td><strong><?php echo formatPrice($customer['total_spent'] ?? 0); ?></strong></td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <a class="btn btn-sm btn-outline" href="<?php echo url('admin/customer.php?id=' . $customer['id']); ?>">View</a>
+                                <a class="btn btn-sm btn-outline" href="<?php echo url('admin/customer-form.php?id=' . $customer['id']); ?>">Edit</a>
+                                <form method="POST" action="<?php echo url('admin/customers.php'); ?>" onsubmit="return confirm('Delete this customer account?');">
+                                    <?php echo csrf_field(); ?>
+                                    <input type="hidden" name="customer_id" value="<?php echo (int)$customer['id']; ?>">
+                                    <button type="submit" name="delete_customer" value="1" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </div>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

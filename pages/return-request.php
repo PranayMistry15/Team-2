@@ -1,14 +1,15 @@
 <?php
 
 $pageTitle = 'Request a Return - Laptro';
-require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/url-helper.php';
 
 if (!isLoggedIn()) { redirect(url('login.php')); }
 
 $conn = getDBConnection();
 $userId = getUserId();
 
-// Ensure `returns` table exists gracefully
 try { $conn->query("SELECT 1 FROM `returns` LIMIT 1"); } catch (Throwable $e) {
     try {
         $conn->exec("CREATE TABLE IF NOT EXISTS `returns` (
@@ -29,6 +30,18 @@ try { $conn->query("SELECT 1 FROM `returns` LIMIT 1"); } catch (Throwable $e) {
     }
 }
 
+try {
+    $idxStmt = $conn->query("SHOW INDEX FROM `returns` WHERE Key_name = 'uq_returns_order_id'");
+    if (!$idxStmt->fetch()) {
+        $dupeStmt = $conn->query("SELECT order_id, COUNT(*) AS total FROM `returns` GROUP BY order_id HAVING COUNT(*) > 1 LIMIT 1");
+        if (!$dupeStmt->fetch()) {
+            $conn->exec("ALTER TABLE `returns` ADD UNIQUE KEY uq_returns_order_id (order_id)");
+        }
+    }
+} catch (Throwable $e) {
+    app_log_error('Failed ensuring returns uniqueness: ' . $e->getMessage());
+}
+
 // Fetch order
 $orderId = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
 if ($orderId <= 0) {
@@ -44,13 +57,20 @@ if (!$order) {
     redirect(url('dashboard.php#orders'));
 }
 
-// Only allow returns for completed orders (basic policy)
+// Only allow returns for completed orders
 if ($order['status'] !== 'completed') {
     setFlash('error', 'Only completed orders can be returned.');
     redirect(url('dashboard.php#orders'));
 }
 
-// Return eligibility: allow once order is completed (no time window enforced)
+$existingStmt = $conn->prepare("SELECT id FROM `returns` WHERE order_id = ? LIMIT 1");
+$existingStmt->execute([$orderId]);
+$existingReturn = $existingStmt->fetch();
+if ($existingReturn) {
+    setFlash('error', 'A return request has already been submitted for this order.');
+    redirect(url('dashboard.php#orders'));
+}
+
 
 // Handle submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -63,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (mb_strlen($details) > 1000) { $errors[] = 'Details are too long'; }
 
     if (!$errors) {
-$stmt = $conn->prepare("INSERT INTO `returns` (order_id, user_id, reason, details) VALUES (?, ?, ?, ?)");
+        $stmt = $conn->prepare("INSERT INTO `returns` (order_id, user_id, reason, details) VALUES (?, ?, ?, ?)");
         $stmt->execute([$orderId, $userId, $reason, $details]);
         notify_user_by_id($userId, 'Return request received', 'We have received your return request for order #' . $orderId . '.');
         setFlash('success', 'Return request submitted. We\'ll email you with next steps.');
@@ -72,6 +92,8 @@ $stmt = $conn->prepare("INSERT INTO `returns` (order_id, user_id, reason, detail
         setFlash('error', implode('\n', $errors));
     }
 }
+
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="container section-padding">

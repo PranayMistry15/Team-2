@@ -1,13 +1,14 @@
 <?php
 
 $pageTitle = 'Manage Returns - Admin';
-require_once '../includes/header.php';
+require_once '../includes/config.php';
+require_once '../includes/functions.php';
+require_once '../includes/url-helper.php';
 
 if (!isAdmin()) { setFlash('error', 'Unauthorized'); redirect(url('index.php')); }
 
 $conn = getDBConnection();
 
-// Ensure `returns` table exists (graceful bootstrap)
 try {
     $conn->query("SELECT 1 FROM `returns` LIMIT 1");
 } catch (Throwable $e) {
@@ -63,6 +64,8 @@ $stmt = $conn->prepare("SELECT r.*, o.total_amount, o.created_at as order_date, 
                          ORDER BY r.created_at DESC");
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
+
+require_once '../includes/header.php';
 ?>
 
 <aside class="admin-sidebar">
@@ -72,9 +75,12 @@ $rows = $stmt->fetchAll();
     <nav class="nav flex-column" aria-label="Admin sidebar">
         <a class="nav-link" href="<?php echo url('admin/index.php'); ?>"><i class="fas fa-home me-2"></i>Dashboard</a>
         <a class="nav-link" href="<?php echo url('admin/products.php'); ?>"><i class="fas fa-laptop me-2"></i>Products</a>
+        <a class="nav-link" href="<?php echo url('admin/stock-receipts.php'); ?>"><i class="fas fa-boxes-stacked me-2"></i>Stock In</a>
+        <a class="nav-link" href="<?php echo url('admin/inventory-reports.php'); ?>"><i class="fas fa-chart-column me-2"></i>Reports</a>
         <a class="nav-link" href="<?php echo url('admin/orders.php'); ?>"><i class="fas fa-shopping-bag me-2"></i>Orders</a>
         <a class="nav-link" href="<?php echo url('admin/customers.php'); ?>"><i class="fas fa-users me-2"></i>Customers</a>
         <a class="nav-link active" href="<?php echo url('admin/returns.php'); ?>"><i class="fas fa-undo me-2"></i>Returns</a>
+        <a class="nav-link" href="<?php echo url('admin/assistance.php'); ?>"><i class="fas fa-headset me-2"></i>Assistance</a>
          <hr style="border-color: #666;">
         <a class="nav-link" href="<?php echo url('index.php'); ?>"><i class="fas fa-globe me-2"></i>View Site</a>
         <a class="nav-link" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Logout</a>
