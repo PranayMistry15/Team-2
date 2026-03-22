@@ -99,22 +99,44 @@ try {
             }
             
             // Get stock
-            $stmt = $conn->prepare("
-                SELECT products.stock 
-                FROM cart 
-                JOIN products ON cart.product_id = products.id 
-                WHERE cart.id = ?
-            ");
-            $stmt->execute([$cartId]);
+            if (isLoggedIn()) {
+                $stmt = $conn->prepare("
+                    SELECT products.stock
+                    FROM cart
+                    JOIN products ON cart.product_id = products.id
+                    WHERE cart.id = ? AND cart.user_id = ?
+                ");
+                $stmt->execute([$cartId, getUserId()]);
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT products.stock
+                    FROM cart
+                    JOIN products ON cart.product_id = products.id
+                    WHERE cart.id = ? AND cart.session_id = ?
+                ");
+                $stmt->execute([$cartId, getCartSessionId()]);
+            }
             $result = $stmt->fetch();
-            
-            if ($quantity > $result['stock']) {
-                setFlash('error', 'Not enough stock available');
+
+            if (!$result) {
+                setFlash('error', 'Cart item not found');
+                $conn->rollBack();
                 redirect(url('cart.php'));
             }
             
-            $stmt = $conn->prepare("UPDATE cart SET quantity = ? WHERE id = ?");
-            $stmt->execute([$quantity, $cartId]);
+            if ($quantity > $result['stock']) {
+                setFlash('error', 'Not enough stock available');
+                $conn->rollBack();
+                redirect(url('cart.php'));
+            }
+            
+            if (isLoggedIn()) {
+                $stmt = $conn->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?");
+                $stmt->execute([$quantity, $cartId, getUserId()]);
+            } else {
+                $stmt = $conn->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND session_id = ?");
+                $stmt->execute([$quantity, $cartId, getCartSessionId()]);
+            }
             
             setFlash('success', 'Cart updated!');
             $conn->commit();
@@ -123,11 +145,20 @@ try {
             
         case 'remove':
             $cartId = (int)$_POST['cart_id'];
+
+            if (isLoggedIn()) {
+                $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND user_id = ?");
+                $stmt->execute([$cartId, getUserId()]);
+            } else {
+                $stmt = $conn->prepare("DELETE FROM cart WHERE id = ? AND session_id = ?");
+                $stmt->execute([$cartId, getCartSessionId()]);
+            }
             
-            $stmt = $conn->prepare("DELETE FROM cart WHERE id = ?");
-            $stmt->execute([$cartId]);
-            
-            setFlash('success', 'Item removed from cart');
+            if ($stmt->rowCount() > 0) {
+                setFlash('success', 'Item removed from cart');
+            } else {
+                setFlash('error', 'Cart item not found');
+            }
             redirect(url('cart.php'));
             break;
             
