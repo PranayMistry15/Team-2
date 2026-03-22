@@ -17,6 +17,10 @@ return [
         'comment' => ['min' => 5, 'max' => 1000],
         'rating' => ['min' => 1, 'max' => 5],
     ],
+    'service_review' => [
+        'comment' => ['min' => 5, 'max' => 1000],
+        'rating' => ['min' => 1, 'max' => 5],
+    ],
     'product' => [
         'name' => ['min' => 2, 'max' => 200],
         'brand' => ['min' => 2, 'max' => 50],
@@ -32,4 +36,3 @@ return [
         'stock' => ['min' => 0, 'max' => 100000],
     ],
 ];
-
