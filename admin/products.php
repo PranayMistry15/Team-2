@@ -1,9 +1,11 @@
 <?php
 
 $pageTitle = 'Manage Products - Admin';
-require_once '../includes/header.php';
+require_once '../includes/config.php';
+require_once '../includes/functions.php';
+require_once '../includes/url-helper.php';
 
-if (!isAdmin()) { redirect('/index.php'); }
+if (!isAdmin()) { redirect(url('index.php')); }
 
 $conn = getDBConnection();
 
@@ -11,8 +13,9 @@ $conn = getDBConnection();
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
 // Handle delete
-if (isset($_GET['delete'])) {
-    $id = (int)$_GET['delete'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_product'])) {
+    verify_csrf_or_abort();
+    $id = (int)($_POST['product_id'] ?? 0);
     $stmt = $conn->prepare("DELETE FROM products WHERE id = ?");
     if ($stmt->execute([$id])) {
         setFlash('success', 'Product deleted!');
@@ -29,7 +32,7 @@ if ($q !== '') {
     $params[] = $like; $params[] = $like;
 }
 
-// Pagination
+
 $perPage = 20;
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $offset = ($page - 1) * $perPage;
@@ -43,6 +46,8 @@ if ($page > $lastPage) { $page = $lastPage; $offset = ($page - 1) * $perPage; }
 $stmt = $conn->prepare("SELECT * FROM products" . $where . " ORDER BY created_at DESC LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $products = $stmt->fetchAll();
+
+require_once '../includes/header.php';
 ?>
 <aside class="admin-sidebar">
   <div class="text-center ">
@@ -51,9 +56,12 @@ $products = $stmt->fetchAll();
     <nav class="nav flex-column" aria-label="Admin sidebar">
         <a class="nav-link" href="<?php echo url('admin/index.php'); ?>"><i class="fas fa-home me-2"></i>Dashboard</a>
         <a class="nav-link active" href="<?php echo url('admin/products.php'); ?>"><i class="fas fa-laptop me-2"></i>Products</a>
+        <a class="nav-link" href="<?php echo url('admin/stock-receipts.php'); ?>"><i class="fas fa-boxes-stacked me-2"></i>Stock In</a>
+        <a class="nav-link" href="<?php echo url('admin/inventory-reports.php'); ?>"><i class="fas fa-chart-column me-2"></i>Reports</a>
         <a class="nav-link" href="<?php echo url('admin/orders.php'); ?>"><i class="fas fa-shopping-bag me-2"></i>Orders</a>
         <a class="nav-link" href="<?php echo url('admin/customers.php'); ?>"><i class="fas fa-users me-2"></i>Customers</a>
         <a class="nav-link" href="<?php echo url('admin/returns.php'); ?>"><i class="fas fa-undo me-2"></i>Returns</a>
+        <a class="nav-link" href="<?php echo url('admin/assistance.php'); ?>"><i class="fas fa-headset me-2"></i>Assistance</a>
         <hr style="border-color: #666;">
         <a class="nav-link" href="<?php echo url('index.php'); ?>"><i class="fas fa-globe me-2"></i>View Site</a>
         <a class="nav-link" href="<?php echo url('logout.php'); ?>"><i class="fas fa-sign-out-alt me-2"></i>Logout</a>
@@ -80,6 +88,7 @@ $products = $stmt->fetchAll();
                         <th>Image</th>
                         <th>Name</th>
                         <th>Brand</th>
+                        <th>Category</th>
                         <th>Price</th>
                         <th>Stock</th>
                         <th>Actions</th>
@@ -87,24 +96,19 @@ $products = $stmt->fetchAll();
                 </thead>
                 <tbody>
                     <?php if (!$products): ?>
-                        <tr><td colspan="7" class="text-center text-muted">No products found</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted">No products found</td></tr>
                     <?php endif; ?>
                     <?php foreach ($products as $product): ?>
                         <tr>
                             <td><?php echo $product['id']; ?></td>
                             <td>
-                                <?php 
-                                    $imgFile = __DIR__ . '/../assets/products/' . ($product['main_image'] ?? '');
-                                    $imgUrl = (!empty($product['main_image']) && file_exists($imgFile))
-                                        ? url('assets/products/' . $product['main_image'])
-                                        : 'https://via.placeholder.com/50';
-                                ?>
-                                <img src="<?php echo $imgUrl; ?>"
+                                <img src="<?php echo htmlspecialchars(resolve_product_image($product['main_image'], $product['name'])); ?>"
                                      style="width: 50px; height: 50px; object-fit: cover;"
-                                     data-fallback="https://via.placeholder.com/50">
+                                     onerror="this.src='https://via.placeholder.com/50'">
                             </td>
                             <td><strong><?php echo htmlspecialchars($product['name']); ?></strong></td>
                             <td><?php echo htmlspecialchars($product['brand']); ?></td>
+                            <td><?php echo htmlspecialchars($product['category'] ?: 'uncategorized'); ?></td>
                             <td><?php echo formatPrice($product['price']); ?></td>
                             <td>
                                 <span class="badge <?php echo $product['stock'] < 5 ? 'badge-warning' : 'badge-success'; ?>">
@@ -114,8 +118,12 @@ $products = $stmt->fetchAll();
                             <td>
                                 <a href="<?php echo url('admin/product-form.php?id=' . $product['id']); ?>" 
                                    class="btn btn-sm btn-outline">Edit</a>
-                                <a href="<?php echo url('admin/products.php?delete=' . $product['id']); ?>" 
-                                    class="btn btn-sm btn-outline-danger" data-confirm="Delete this product?">Delete</a>
+                                <form method="POST" action="<?php echo url('admin/products.php'); ?>" class="d-inline">
+                                    <?php echo csrf_field(); ?>
+                                    <input type="hidden" name="product_id" value="<?php echo (int)$product['id']; ?>">
+                                    <button type="submit" name="delete_product" value="1"
+                                        class="btn btn-sm btn-outline-danger" data-confirm="Delete this product?">Delete</button>
+                                </form>
                             </td>
                         </tr>
                     <?php endforeach; ?>

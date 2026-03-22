@@ -1,6 +1,8 @@
 <?php
 $pageTitle = 'Product Form - Admin';
-require_once '../includes/header.php';
+require_once '../includes/config.php';
+require_once '../includes/functions.php';
+require_once '../includes/url-helper.php';
 if (!isAdmin()) { redirect(url('index.php')); }
 
 $conn = getDBConnection();
@@ -19,12 +21,12 @@ if (isset($_GET['id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf_or_abort();
     try {
-        // Basic product data
         $name = clean($_POST['name']);
         $brand = clean($_POST['brand']);
         $description = clean($_POST['description']);
         $price = (float)$_POST['price'];
         $stock = (int)$_POST['stock'];
+        $category = clean($_POST['category'] ?? '');
         $cpu = clean($_POST['cpu']);
         $ram = clean($_POST['ram']);
         $storage = clean($_POST['storage']);
@@ -41,13 +43,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pr = constraints('product');
         v_string_length($name, 'Product name', $pr['name']['min'], $pr['name']['max'], $formErrors);
         v_string_length($brand, 'Brand', $pr['brand']['min'], $pr['brand']['max'], $formErrors);
-        // Optional brand whitelist 
-        $allowedBrands = ['Dell','Apple','Lenovo','HP','ASUS','Acer'];
+        $allowedBrands = ['Dell','Apple','Lenovo','HP','ASUS','Acer','MSI','Alienware','Microsoft','LG','Samsung','Razer'];
         if (!in_array($brand, $allowedBrands, true)) {
             $formErrors[] = 'Brand must be one of: ' . implode(', ', $allowedBrands);
         }
         v_decimal_range($price, 'Price', 0.01, 100000, $formErrors);
         if ($stock < 0) { $formErrors[] = 'Stock cannot be negative'; }
+        $allowedCategories = ['high-speed', 'portable', 'gaming', 'business', 'budget'];
+        if (!in_array($category, $allowedCategories, true)) {
+            $formErrors[] = 'Category must be one of: ' . implode(', ', $allowedCategories);
+        }
         v_string_length($cpu, 'CPU', $pr['cpu']['min'], $pr['cpu']['max'], $formErrors);
         v_string_length($ram, 'RAM', $pr['ram']['min'], $pr['ram']['max'], $formErrors);
         v_string_length($storage, 'Storage', $pr['storage']['min'], $pr['storage']['max'], $formErrors);
@@ -97,18 +102,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fileCount = count($_FILES['pictures']['name']);
             
             for ($i = 0; $i < $fileCount; $i++) {
-                // Skip if no file
                 if ($_FILES['pictures']['error'][$i] === UPLOAD_ERR_NO_FILE) {
                     continue;
                 }
-                
-                // Error handler
+
                 if ($_FILES['pictures']['error'][$i] !== UPLOAD_ERR_OK) {
                     $uploadErrors[] = "Error uploading: " . $_FILES['pictures']['name'][$i];
                     continue;
                 }
-                
-                // Type handler
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $mimeType = finfo_file($finfo, $_FILES['pictures']['tmp_name'][$i]);
                 finfo_close($finfo);
@@ -149,7 +150,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Move File
                 if (move_uploaded_file($_FILES['pictures']['tmp_name'][$i], $targetPath)) {
-                    // Strip metadata by re-encoding where supported
                     try {
                         $imgData = @file_get_contents($targetPath);
                         if ($imgData !== false) {
@@ -165,7 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 imagedestroy($image);
                             }
                         }
-                    } catch (Exception $e) { /* ignore */ }
+                    } catch (Exception $e) { /* ignore lol */ }
                     $newImages[] = '/uploads/products/' . $filename;
                 } else {
                     $uploadErrors[] = "Failed to save: " . $_FILES['pictures']['name'][$i];
@@ -184,18 +184,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Update OR Insert product
         if ($isEdit) {
-            $stmt = $conn->prepare("UPDATE products SET name = ?, brand = ?, description = ?, price = ?, stock = ?, cpu = ?, ram = ?, storage = ?, gpu = ?, screen_size = ?, resolution = ?, battery = ?, weight = ?, os = ?, is_featured = ?,pictures = ? WHERE id = ?");
+            $stmt = $conn->prepare("UPDATE products SET name = ?, brand = ?, description = ?, price = ?, stock = ?, category = ?, cpu = ?, ram = ?, storage = ?, gpu = ?, screen_size = ?, resolution = ?, battery = ?, weight = ?, os = ?, is_featured = ?,pictures = ? WHERE id = ?");
             $stmt->execute([
-                $name, $brand, $description, $price, $stock, 
+                $name, $brand, $description, $price, $stock, $category,
                 $cpu, $ram, $storage, $gpu, $screen_size, 
                 $resolution, $battery, $weight, $os, $is_featured,
                 $picturesJson, $_GET['id']
             ]);
             setFlash('success', 'Product updated successfully!');
         } else {
-            $stmt = $conn->prepare("INSERT INTO products (name, brand, description, price, stock, cpu, ram, storage, gpu, screen_size, resolution, battery, weight, os, is_featured, pictures, main_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'placeholder.jpg')");
+            $stmt = $conn->prepare("INSERT INTO products (name, brand, description, price, stock, category, cpu, ram, storage, gpu, screen_size, resolution, battery, weight, os, is_featured, pictures, main_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'placeholder.jpg')");
             $stmt->execute([
-                $name, $brand, $description, $price, $stock, 
+                $name, $brand, $description, $price, $stock, $category,
                 $cpu, $ram, $storage, $gpu, $screen_size, 
                 $resolution, $battery, $weight, $os, $is_featured,
                 $picturesJson
@@ -209,6 +209,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setFlash('error', 'Something went wrong while saving the product. Please try again.');
     }
 }
+
+require_once '../includes/header.php';
 ?>
 
 <style>
@@ -233,6 +235,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </style>
 
 <div class="container py-5">
+    <div class="mb-3">
+        <a href="<?php echo url('admin/stock-receipts.php'); ?>" class="btn btn-outline btn-sm"><i class="fas fa-boxes-stacked me-2"></i>Record Incoming Stock</a>
+    </div>
     <h3><?php echo $isEdit ? 'Edit' : 'Add New'; ?> Product</h3>
     
     <form method="POST" enctype="multipart/form-data" class="mt-4">
@@ -262,6 +267,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label" for="prod_stock">Stock *</label>
                 <input type="number" id="prod_stock" name="stock" class="form-control" value="<?php echo $product['stock'] ?? ''; ?>" required>
             </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="prod_category">Category *</label>
+            <select id="prod_category" name="category" class="form-control" required>
+                <?php $currentCategory = $product['category'] ?? ''; ?>
+                <option value="">Select category</option>
+                <option value="high-speed" <?php echo $currentCategory === 'high-speed' ? 'selected' : ''; ?>>High Performance</option>
+                <option value="portable" <?php echo $currentCategory === 'portable' ? 'selected' : ''; ?>>Portable</option>
+                <option value="gaming" <?php echo $currentCategory === 'gaming' ? 'selected' : ''; ?>>Gaming</option>
+                <option value="business" <?php echo $currentCategory === 'business' ? 'selected' : ''; ?>>Business</option>
+                <option value="budget" <?php echo $currentCategory === 'budget' ? 'selected' : ''; ?>>Budget Friendly</option>
+            </select>
         </div>
         
         <h4 class="mt-4">Specifications</h4>
@@ -319,7 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ?>
                                 <div class="col-md-3 col-sm-6 mb-3">
                                     <div class="position-relative">
-                                        <img src="<?php echo htmlspecialchars($image); ?>" class="img-thumbnail" alt="Product Image">
+                                        <img src="<?php echo htmlspecialchars(product_image_url($image) ?: resolve_product_image($image, $product['name'] ?? '')); ?>" class="img-thumbnail" alt="Product Image">
                                         <div class="form-check mt-2">
                                             <input type="checkbox" class="form-check-input" name="delete_images[]" value="<?php echo $index; ?>" id="delete_<?php echo $index; ?>">
                                             <label class="form-check-label" for="delete_<?php echo $index; ?>">
