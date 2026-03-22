@@ -21,7 +21,7 @@ $subtotal = 0;
 foreach ($cartItems as $item) {
     $subtotal += $item['price'] * $item['quantity'];
 }
-$tax = $subtotal * 0.1; // 10% tax tho can adjust to UK limit idk what the tax regulations for UK are will research
+$tax = $subtotal * 0.1; // 10% tax tho can adjust to UK limit idk what the tax regulations for UK are
 $total = $subtotal + $tax;
 ?>
 
@@ -55,7 +55,7 @@ $total = $subtotal + $tax;
                                     <tr>
                                         <td>
                                             <div class="d-flex align-items-center">
-                                                <img src="/assets/products/<?php echo $item['main_image']; ?>" 
+                                                <img src="<?php echo htmlspecialchars(resolve_product_image($item['main_image'], $item['name'])); ?>" 
                                                      alt="<?php echo htmlspecialchars($item['name']); ?>" 
                                                      class="cart-item-image me-3"
                                                      onerror="this.src='https://via.placeholder.com/80?text=Product'">
@@ -154,5 +154,3 @@ $total = $subtotal + $tax;
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-       </tr>
-   @endforeach
