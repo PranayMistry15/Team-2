@@ -2,10 +2,50 @@
 
 
 $pageTitle = 'Laptop Buying Guide - Laptro';
-require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/url-helper.php';
 
+initSession();
 $conn = getDBConnection();
 
+function buying_guide_find_recommendations(PDO $conn, $fieldOfStudy, $budget, $primaryUse, $ramPreference = '', $portability = '') {
+    $query = "SELECT * FROM products WHERE price <= ? AND stock > 0";
+    $params = [(int)$budget + 200];
+
+    if ($fieldOfStudy === 'computer_science' || $fieldOfStudy === 'engineering') {
+        $query .= " AND (ram LIKE '%16GB%' OR ram LIKE '%32GB%')";
+    } elseif ($fieldOfStudy === 'design') {
+        $query .= " AND (ram LIKE '%16GB%' OR ram LIKE '%32GB%')";
+        $query .= " AND (gpu NOT LIKE '%Intel%' OR gpu LIKE '%Iris Xe%')";
+    }
+
+    if ($primaryUse === 'coding' || $primaryUse === 'gaming') {
+        $query .= " AND (cpu LIKE '%i7%' OR cpu LIKE '%i9%' OR cpu LIKE '%Ryzen 7%' OR cpu LIKE '%Ryzen 9%' OR cpu LIKE '%M2%' OR cpu LIKE '%Ultra 7%' OR cpu LIKE '%Ultra 9%')";
+    }
+
+    if ($ramPreference === 'high') {
+        $query .= " AND (ram LIKE '%16GB%' OR ram LIKE '%32GB%')";
+    }
+
+    if ($portability === 'very') {
+        $query .= " AND (weight LIKE '%1.0%' OR weight LIKE '%1.1%' OR weight LIKE '%1.2%' OR weight LIKE '%1.3%' OR weight LIKE '%1.4%' OR weight LIKE '%1.5%' OR CAST(REPLACE(REPLACE(weight, 'kg', ''), ' ', '') AS DECIMAL(3,2)) <= 1.5)";
+    }
+
+    $query .= " ORDER BY is_featured DESC, price DESC LIMIT 6";
+    $stmt = $conn->prepare($query);
+    $stmt->execute($params);
+    $recommendations = $stmt->fetchAll();
+
+    if (!empty($recommendations)) {
+        return $recommendations;
+    }
+
+    // Fallback
+    $fallbackStmt = $conn->prepare("SELECT * FROM products WHERE price <= ? AND stock > 0 ORDER BY is_featured DESC, price DESC LIMIT 6");
+    $fallbackStmt->execute([(int)$budget + 200]);
+    return $fallbackStmt->fetchAll();
+}
 
 $recommendations = [];
 if (isset($_GET['reset'])) {
@@ -15,6 +55,18 @@ if (isset($_GET['reset'])) {
 }
 if (isset($_GET['results'])) {
     $recommendations = $_SESSION['quiz_reco'] ?? [];
+    if (empty($recommendations) && !empty($_SESSION['quiz_meta'])) {
+        $meta = $_SESSION['quiz_meta'];
+        $recommendations = buying_guide_find_recommendations(
+            $conn,
+            $meta['field_of_study'] ?? '',
+            (int)($meta['budget'] ?? 0),
+            $meta['primary_use'] ?? '',
+            $meta['ram_preference'] ?? '',
+            $meta['portability'] ?? ''
+        );
+        $_SESSION['quiz_reco'] = $recommendations;
+    }
     if (empty($recommendations)) {
         setFlash('error', 'No matching laptops found. Try increasing your budget or adjusting your answers.');
         header('Location: ' . url('buying-guide.php'));
@@ -28,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fieldOfStudy = clean($_POST['field_of_study']);
     $budget = (int)$_POST['budget'];
     $primaryUse = clean($_POST['primary_use']);
+    $portability = clean($_POST['portability'] ?? '');
     $ramPreference = clean($_POST['ram_preference'] ?? '');
     
     if (isLoggedIn()) {
@@ -38,34 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([getUserId(), $fieldOfStudy, $budget - 200, $budget + 200]);
     }
     
-    $query = "SELECT * FROM products WHERE price <= ? AND stock > 0";
-    $params = [$budget + 200];
-    
-    if ($fieldOfStudy === 'computer_science' || $fieldOfStudy === 'engineering') {
-        $query .= " AND (ram LIKE '%16GB%' OR ram LIKE '%32GB%')";
-    } elseif ($fieldOfStudy === 'design') {
-        $query .= " AND (ram LIKE '%16GB%' OR ram LIKE '%32GB%')";
-        $query .= " AND (gpu NOT LIKE '%Intel%' OR gpu LIKE '%Iris Xe%')";
-    }
-    
-    if ($primaryUse === 'coding' || $primaryUse === 'gaming') {
-        $query .= " AND (cpu LIKE '%i7%' OR cpu LIKE '%i9%' OR cpu LIKE '%Ryzen 7%' OR cpu LIKE '%Ryzen 9%' OR cpu LIKE '%M2%')";
-    }
-
-    $query .= " ORDER BY is_featured DESC, price DESC LIMIT 6";
-    
-    $stmt = $conn->prepare($query);
-    $stmt->execute($params);
-    $_SESSION['quiz_reco'] = $stmt->fetchAll();
+    $_SESSION['quiz_reco'] = buying_guide_find_recommendations($conn, $fieldOfStudy, $budget, $primaryUse, $ramPreference, $portability);
     $_SESSION['quiz_meta'] = [
         'field_of_study' => $fieldOfStudy,
         'budget' => $budget,
         'primary_use' => $primaryUse,
+        'portability' => $portability,
         'ram_preference' => $ramPreference,
     ];
     header('Location: ' . url('buying-guide.php?results=1'));
     exit;
 }
+
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <?php if (empty($recommendations)): ?>
@@ -198,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="row g-4">
             <?php foreach ($recommendations as $product): 
                 $rating = getAverageRating($product['id']);
-                $matchScore = 85 + rand(0, 15); // 85-100%
+                $matchScore = 85 + rand(0, 15); 
             ?>
                 <div class="col-md-6 col-lg-4">
                     <div class="product-card">
@@ -209,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         
                         <a href="<?php echo url('product.php?id=' . $product['id']); ?>">
-                            <img src="/assets/products/<?php echo $product['main_image']; ?>" 
+                            <img src="<?php echo htmlspecialchars(resolve_product_image($product['main_image'], $product['name'])); ?>" 
                                  alt="<?php echo htmlspecialchars($product['name']); ?>"
                                  onerror="this.src='https://via.placeholder.com/400x300?text=<?php echo urlencode($product['name']); ?>'">
                         </a>
