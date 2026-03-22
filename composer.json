@@ -2,7 +2,7 @@
   "name": "laptro/ecommerce",
   "description": "Laptro E-commerce (Core PHP) with optional Laravel Eloquent integration",
   "require": {
-    "illuminate/database": "^10.0",
+    "illuminate/database": "^9.52",
     "vlucas/phpdotenv": "^5.5"
   },
   "autoload": {
@@ -11,4 +11,3 @@
     }
   }
 }
-
