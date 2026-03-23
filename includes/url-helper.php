@@ -1,6 +1,6 @@
 <?php
 
-// BASE_URL is dynamic
+// BASE_URL is dynamic dude 
 if (!defined('BASE_URL')) {
     $https = (
         (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||

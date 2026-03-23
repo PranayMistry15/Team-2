@@ -8,9 +8,13 @@ require_once __DIR__ . '/url-helper.php';
 set_security_headers();
 
 initSession();
+user_security_ensure_columns();
+product_schema_ensure_columns();
+enforce_password_change_if_needed();
 $cartCount = getCartCount();
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $isAdminPage = strpos($_SERVER['PHP_SELF'] ?? '', '/admin/') !== false;
+$styleVersion = file_exists(__DIR__ . '/../css/style.css') ? filemtime(__DIR__ . '/../css/style.css') : time();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,7 +26,7 @@ $isAdminPage = strpos($_SERVER['PHP_SELF'] ?? '', '/admin/') !== false;
     <title><?php echo $pageTitle ?? 'Laptro - Laptops for Tech Students'; ?></title>
     
     <link rel="icon" type="image/png" href="<?php echo asset('images/favicon.png'); ?>">
-    <link rel="preload" as="style" href="<?php echo url('css/style.css'); ?>">
+    <link rel="preload" as="style" href="<?php echo url('css/style.css?v=' . $styleVersion); ?>">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
@@ -31,19 +35,16 @@ $isAdminPage = strpos($_SERVER['PHP_SELF'] ?? '', '/admin/') !== false;
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?php echo url('css/style.css'); ?>">
+    <link rel="stylesheet" href="<?php echo url('css/style.css?v=' . $styleVersion); ?>">
     <?php if ($isAdminPage): ?>
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/webfonts/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
     <?php endif; ?>
     <?php if ($isAdminPage): ?>
     <style>
-        /* Critical admin layout to prevent first-paint shifts on sidebar */
         .admin-sidebar { width: 260px; position: fixed; }
         .admin-main { margin-left: 260px; }
         .admin-sidebar .nav-link { display: flex; align-items: center; gap: 1rem; white-space: nowrap; min-height: 44px; }
         .admin-sidebar .nav-link i { display: inline-block; min-width: 1.25em; width: 1.25em; line-height: 1; }
-        /* Reserve icon width via classes; no ::before to avoid overriding FA glyphs */
-        /* Ensure FA icon classes reserve width before webfont loads */
         .fas, .fa-solid, .far, .fa-regular, .fab, .fa-brands { display: inline-block; width: 1.25em; min-width: 1.25em; text-align: center; }
     </style>
     <?php endif; ?>
@@ -68,10 +69,16 @@ $isAdminPage = strpos($_SERVER['PHP_SELF'] ?? '', '/admin/') !== false;
                             <a class="nav-link <?php echo $currentPage == 'index' ? 'active' : ''; ?>" href="<?php echo url('index.php'); ?>">Home</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link <?php echo $currentPage == 'about' ? 'active' : ''; ?>" href="<?php echo url('about.php'); ?>">About</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link <?php echo $currentPage == 'products' ? 'active' : ''; ?>" href="<?php echo url('products.php'); ?>">Laptops</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link <?php echo $currentPage == 'buying-guide' ? 'active' : ''; ?>" href="<?php echo url('buying-guide.php'); ?>">Buying Guide</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link <?php echo $currentPage == 'contact' ? 'active' : ''; ?>" href="<?php echo url('contact.php'); ?>">Contact</a>
                         </li>
                         
                         <?php if (isLoggedIn()): ?>
