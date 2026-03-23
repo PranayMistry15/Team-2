@@ -1,7 +1,9 @@
 <?php
 
 $pageTitle = 'Product Details - Laptro';
-require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/url-helper.php';
 
 $productId = $_GET['id'] ?? 0;
 
@@ -28,6 +30,30 @@ $reviewsStmt->execute([$productId]);
 $reviews = $reviewsStmt->fetchAll();
 
 $rating = getAverageRating($productId);
+
+// Build product image list
+$images = [];
+if (!empty($product['pictures'])) {
+    $gallery = json_decode($product['pictures'], true);
+    if (is_array($gallery)) {
+        foreach ($gallery as $img) {
+            $url = product_image_url($img);
+            if ($url) { $images[] = $url; }
+        }
+    }
+}
+foreach (['main_image', 'image_2', 'image_3', 'image_4'] as $field) {
+    if (!empty($product[$field]) && $product[$field] !== 'placeholder.jpg') {
+        $url = product_image_url($product[$field]);
+        if ($url) { $images[] = $url; }
+    }
+}
+$images = array_values(array_unique(array_filter($images)));
+if (empty($images)) {
+    $fallback = resolve_product_image('', $product['name']);
+    $images[] = $fallback;
+}
+$mainImage = $images[0];
 
 // Handle review submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
@@ -64,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
 }
 
 $pageTitle = $product['name'] . ' - Laptro';
+require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="container section-padding">
@@ -78,39 +105,20 @@ $pageTitle = $product['name'] . ' - Laptro';
     <div class="row">
         <div class="col-lg-6 mb-4">
             <div class="product-detail-image">
-                <img src="/assets/products/<?php echo $product['main_image']; ?>" 
+                <img src="<?php echo htmlspecialchars($mainImage); ?>" 
                      alt="<?php echo htmlspecialchars($product['name']); ?>" 
                      id="mainImage" width="600" height="450" sizes="(min-width: 992px) 600px, 100vw"
                      onerror="this.src='https://via.placeholder.com/600x450?text=<?php echo urlencode($product['name']); ?>'">
             </div>
             
             <div class="product-thumbnails">
-                <div class="thumbnail active" onclick="changeImage('/assets/products/<?php echo $product['main_image']; ?>')">
-                    <img src="/assets/products/<?php echo $product['main_image']; ?>" loading="lazy" width="150" height="150"
-                         alt="Thumbnail 1"
-                         onerror="this.src='https://via.placeholder.com/150?text=1'">
-                </div>
-                <?php if ($product['image_2']): ?>
-                    <div class="thumbnail" onclick="changeImage('/assets/products/<?php echo $product['image_2']; ?>')">
-                        <img src="/assets/products/<?php echo $product['image_2']; ?>" loading="lazy" width="150" height="150"
-                             alt="Thumbnail 2"
-                             onerror="this.src='https://via.placeholder.com/150?text=2'">
+                <?php foreach ($images as $i => $img): ?>
+                    <div class="thumbnail <?php echo $i === 0 ? 'active' : ''; ?>" onclick="changeImage('<?php echo htmlspecialchars($img, ENT_QUOTES); ?>', this)">
+                        <img src="<?php echo htmlspecialchars($img); ?>" loading="lazy" width="150" height="150"
+                             alt="Thumbnail <?php echo $i + 1; ?>"
+                             onerror="this.src='https://via.placeholder.com/150?text=<?php echo $i + 1; ?>'">
                     </div>
-                <?php endif; ?>
-                <?php if ($product['image_3']): ?>
-                    <div class="thumbnail" onclick="changeImage('/assets/products/<?php echo $product['image_3']; ?>')">
-                        <img src="/assets/products/<?php echo $product['image_3']; ?>" loading="lazy" width="150" height="150"
-                             alt="Thumbnail 3"
-                             onerror="this.src='https://via.placeholder.com/150?text=3'">
-                    </div>
-                <?php endif; ?>
-                <?php if ($product['image_4']): ?>
-                    <div class="thumbnail" onclick="changeImage('/assets/products/<?php echo $product['image_4']; ?>')">
-                        <img src="/assets/products/<?php echo $product['image_4']; ?>" loading="lazy" width="150" height="150"
-                             alt="Thumbnail 4"
-                             onerror="this.src='https://via.placeholder.com/150?text=4'">
-                    </div>
-                <?php endif; ?>
+                <?php endforeach; ?>
             </div>
         </div>
         
@@ -214,15 +222,15 @@ $pageTitle = $product['name'] . ' - Laptro';
                                 <label class="form-label">Rating *</label>
                                 <div class="rating-input">
                                     <input type="radio" name="rating" value="5" id="star5" required>
-                                    <label for="star5">★</label>
+                                    <label for="star5">&#9733;</label>
                                     <input type="radio" name="rating" value="4" id="star4">
-                                    <label for="star4">★</label>
+                                    <label for="star4">&#9733;</label>
                                     <input type="radio" name="rating" value="3" id="star3">
-                                    <label for="star3">★</label>
+                                    <label for="star3">&#9733;</label>
                                     <input type="radio" name="rating" value="2" id="star2">
-                                    <label for="star2">★</label>
+                                    <label for="star2">&#9733;</label>
                                     <input type="radio" name="rating" value="1" id="star1">
-                                    <label for="star1">★</label>
+                                    <label for="star1">&#9733;</label>
                                 </div>
                             </div>
                             
@@ -276,10 +284,12 @@ $pageTitle = $product['name'] . ' - Laptro';
 </div>
 
 <script>
-function changeImage(src) {
+function changeImage(src, el) {
     document.getElementById('mainImage').src = src;
     document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    if (el) {
+        el.classList.add('active');
+    }
 }
 </script>
 

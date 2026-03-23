@@ -12,15 +12,18 @@ $maxPrice = $_GET['max_price'] ?? '';
 $ram = $_GET['ram'] ?? '';
 $cpu = $_GET['cpu'] ?? '';
 $storage = $_GET['storage'] ?? '';
+$category = $_GET['category'] ?? '';
 
 // Whitelists for filters
 $allowedRam = ['8GB','16GB','32GB'];
 $allowedCpu = ['Intel Core i5','Intel Core i7','Intel Core i9','AMD Ryzen 5','AMD Ryzen 7','AMD Ryzen 9','Apple M'];
 $allowedStorage = ['256GB','512GB','1TB'];
+$allowedCategories = ['high-speed','portable','gaming','business','budget'];
 
 if ($ram && !in_array($ram, $allowedRam, true)) { $ram = ''; }
 if ($cpu && !array_filter($allowedCpu, function($c) use ($cpu){ return $cpu === $c || ($c === 'Apple M' && strpos($cpu,'Apple M')!==false); })) { $cpu = ''; }
 if ($storage && !in_array($storage, $allowedStorage, true)) { $storage = ''; }
+if ($category && !in_array($category, $allowedCategories, true)) { $category = ''; }
 $search = $_GET['search'] ?? '';
 
 // Build dynamic WHERE and params
@@ -65,25 +68,39 @@ if ($storage) {
     $params[] = "%$storage%";
 }
 
+// Category-based filters
+if ($category) {
+    $where .= " AND category = ?";
+    $params[] = $category;
+}
+
 // Pagination
 $perPage = 12;
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$offset = ($page - 1) * $perPage;
 
 // Total count
 $countStmt = $conn->prepare("SELECT COUNT(*) FROM products" . $where);
 $countStmt->execute($params);
 $total = (int)$countStmt->fetchColumn();
 $lastPage = max(1, (int)ceil($total / $perPage));
-if ($page > $lastPage) { $page = $lastPage; $offset = ($page - 1) * $perPage; }
+if ($page > $lastPage) {
+    $page = $lastPage;
+}
+
+$offset = ($page - 1) * $perPage;
 
 // Fetch current page
-$listSql = "SELECT * FROM products" . $where . " ORDER BY created_at DESC LIMIT $perPage OFFSET $offset";
+$orderBy = " ORDER BY created_at DESC";
+if ($category === 'business') {
+    $orderBy = " ORDER BY CASE WHEN name = 'HP OmniBook X Flip NGAI 16' THEN 1 ELSE 0 END ASC, created_at DESC";
+}
+
+$listSql = "SELECT * FROM products" . $where . $orderBy . " LIMIT $perPage OFFSET $offset";
 $stmt = $conn->prepare($listSql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
-// Prefetch ratings in one query to avoid N+1
+// Prefetch ratings 
 $ratingsByProduct = [];
 if ($products) {
     $ids = array_column($products, 'id');
@@ -107,17 +124,16 @@ function getProductImage($product) {
     if (!empty($product['pictures'])) {
         $images = json_decode($product['pictures'], true);
         if (is_array($images) && !empty($images)) {
-            return htmlspecialchars(url(ltrim($images[0], '/'))); 
+            foreach ($images as $image) {
+                $url = product_image_url($image);
+                if ($url) {
+                    return htmlspecialchars($url);
+                }
+            }
         }
     }
-    
-    // Fallback 
-    if (!empty($product['main_image']) && $product['main_image'] !== 'placeholder.jpg') {
-        return asset('products/' . htmlspecialchars($product['main_image']));
-    }
-    
-    // Extra fallback
-    return 'https://via.placeholder.com/400x300?text=' . urlencode($product['name']);
+
+    return htmlspecialchars(resolve_product_image($product['main_image'] ?? '', $product['name'] ?? ''));
 }
 ?>
 
@@ -130,10 +146,15 @@ function getProductImage($product) {
                 
                 <form method="GET" action="<?php echo url('products.php'); ?>" id="filterForm">
                     <div class="filter-group">
-                        <label for="search">Search</label>
-                        <input type="text" id="search" name="search" class="form-control" 
-                               placeholder="Search laptops..." 
-                               value="<?php echo htmlspecialchars($search); ?>">
+                        <label for="category">Category</label>
+                        <select id="category" name="category" class="form-control">
+                            <option value="">All Categories</option>
+                            <option value="high-speed" <?php echo $category === 'high-speed' ? 'selected' : ''; ?>>High Performance</option>
+                            <option value="portable" <?php echo $category === 'portable' ? 'selected' : ''; ?>>Portable & Lightweight</option>
+                            <option value="gaming" <?php echo $category === 'gaming' ? 'selected' : ''; ?>>Gaming</option>
+                            <option value="business" <?php echo $category === 'business' ? 'selected' : ''; ?>>Business</option>
+                            <option value="budget" <?php echo $category === 'budget' ? 'selected' : ''; ?>>Budget Friendly</option>
+                        </select>
                     </div>
                     
                     <div class="filter-group">
@@ -208,9 +229,45 @@ function getProductImage($product) {
         </div>
         
         <div class="col-lg-9">
+            <div class="quick-search-section mb-4">
+                <form method="GET" action="<?php echo url('products.php'); ?>" class="d-flex gap-2">
+                    <input type="text" name="search" class="form-control form-control-lg" 
+                           placeholder="Search laptops by name, brand, or specs..." 
+                           value="<?php echo htmlspecialchars($search); ?>">
+                    <button type="submit" class="btn btn-primary btn-lg px-4">Search</button>
+                </form>
+                
+                <div class="quick-filters mt-3 d-flex flex-wrap gap-2">
+                    <a href="<?php echo url('products.php'); ?>" 
+                       class="btn btn-sm <?php echo !$category ? 'btn-primary' : 'btn-outline'; ?>">
+                        All
+                    </a>
+                    <a href="<?php echo url('products.php?category=high-speed'); ?>" 
+                       class="btn btn-sm <?php echo $category === 'high-speed' ? 'btn-primary' : 'btn-outline'; ?>">
+                        High Performance
+                    </a>
+                    <a href="<?php echo url('products.php?category=portable'); ?>" 
+                       class="btn btn-sm <?php echo $category === 'portable' ? 'btn-primary' : 'btn-outline'; ?>">
+                        Portable
+                    </a>
+                    <a href="<?php echo url('products.php?category=gaming'); ?>" 
+                       class="btn btn-sm <?php echo $category === 'gaming' ? 'btn-primary' : 'btn-outline'; ?>">
+                        Gaming
+                    </a>
+                    <a href="<?php echo url('products.php?category=business'); ?>" 
+                       class="btn btn-sm <?php echo $category === 'business' ? 'btn-primary' : 'btn-outline'; ?>">
+                        Business
+                    </a>
+                    <a href="<?php echo url('products.php?category=budget'); ?>" 
+                       class="btn btn-sm <?php echo $category === 'budget' ? 'btn-primary' : 'btn-outline'; ?>">
+                        Budget Friendly
+                    </a>
+                </div>
+            </div>
+            
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>All Laptops</h2>
-                <span class="text-muted"><?php echo count($products); ?> products found</span>
+                <span class="text-muted"><?php echo $total; ?> products found</span>
             </div>
             
             <?php if (empty($products)): ?>
@@ -225,16 +282,16 @@ function getProductImage($product) {
                     <?php foreach ($products as $product): 
                         $rating = $ratingsByProduct[$product['id']] ?? ['average' => 0, 'total' => 0];
                         $productImage = getProductImage($product);
+                        $stockMeta = stock_status_meta($product['stock'] ?? 0);
                     ?>
                         <div class="col-md-6 col-lg-4">
                             <div class="product-card">
                                 <a href="<?php echo url('product.php?id=' . $product['id']); ?>">
                                     <?php 
-                                        // Server-side fallback to avoid 404 waterfalls
                                         $imgCandidate = $productImage;
                                         $imgFs = null;
                                         if (strpos($imgCandidate, BASE_URL) === 0) {
-                                            $rel = substr($imgCandidate, strlen(BASE_URL) + 1); // strip base + '/'
+                                            $rel = substr($imgCandidate, strlen(BASE_URL) + 1);
                                             $imgFs = realpath(__DIR__ . '/../' . str_replace('..','',$rel));
                                         }
                                         $imgSrc = ($imgFs && file_exists($imgFs)) ? $imgCandidate : 'https://via.placeholder.com/400x300?text=' . urlencode($product['name']);
@@ -255,15 +312,20 @@ function getProductImage($product) {
                                             <?php echo htmlspecialchars($product['cpu']); ?>
                                         <?php endif; ?>
                                         <?php if (!empty($product['ram'])): ?>
-                                            • <?php echo htmlspecialchars($product['ram']); ?>
+                                            &bull; <?php echo htmlspecialchars($product['ram']); ?>
                                         <?php endif; ?>
                                         <?php if (!empty($product['storage'])): ?>
-                                            • <?php echo htmlspecialchars($product['storage']); ?>
+                                            &bull; <?php echo htmlspecialchars($product['storage']); ?>
                                         <?php endif; ?>
                                     </div>
                                     <div class="product-rating">
                                         <?php echo renderStars($rating['average']); ?>
                                         <span class="text-muted ms-2">(<?php echo $rating['total']; ?>)</span>
+                                    </div>
+                                    <div class="product-stock-badge">
+                                        <span class="badge badge-<?php echo htmlspecialchars($stockMeta['class']); ?>">
+                                            <?php echo htmlspecialchars($stockMeta['label']); ?>
+                                        </span>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center mt-3">
                                         <div class="product-price"><?php echo formatPrice($product['price']); ?></div>
@@ -277,7 +339,6 @@ function getProductImage($product) {
 
                 <?php if ($lastPage > 1): ?>
                     <?php
-                        // Preserve filters in query string
                         $qs = $_GET;
                         $makeLink = function($p) use ($qs) {
                             $qs['page'] = $p;
@@ -304,19 +365,5 @@ function getProductImage($product) {
         </div>
     </div>
 </div>
-
-<style>
-.product-card-img {
-    width: 100%;
-    height: 250px;
-    object-fit: cover;
-    border-radius: 8px 8px 0 0;
-}
-
-.product-card:hover .product-card-img {
-    transform: scale(1.05);
-    transition: transform 0.3s ease;
-}
-</style>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

@@ -1,7 +1,6 @@
 <?php
 
 $pageTitle = 'Checkout - Laptro';
-// Load helpers early (no output yet) so redirects work before headers
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/url-helper.php';
@@ -13,7 +12,7 @@ if (!isLoggedIn()) {
 
 $conn = getDBConnection();
 
-// Get cart items and guard empties before any output
+// Get cart items 
 $stmt = $conn->prepare("SELECT cart.*, products.* FROM cart JOIN products ON cart.product_id = products.id WHERE cart.user_id = ?");
 $stmt->execute([getUserId()]);
 $cartItems = $stmt->fetchAll();
@@ -33,7 +32,7 @@ $stmt->execute([getUserId()]);
 $user = $stmt->fetch();
 
 $errors = [];
-// Handle form submission before emitting headers/body
+// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf_or_abort();
     $address = clean($_POST['address']);
@@ -61,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $conn->beginTransaction();
             $shippingAddress = "$address, $city, $postalCode";
-            $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, payment_method) VALUES (?, ?, 'completed', ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address, payment_method) VALUES (?, ?, 'pending', ?, ?)");
             $stmt->execute([getUserId(), $total, $shippingAddress, $paymentMethod]);
             $orderId = $conn->lastInsertId();
 
@@ -81,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $conn->prepare("DELETE FROM cart WHERE user_id = ?");
             $stmt->execute([getUserId()]);
             $conn->commit();
-            setFlash('success', 'Order placed successfully! Order ID: #' . $orderId);
+            setFlash('success', 'Order placed successfully. Order #' . $orderId . ' is now pending admin processing.');
             redirect(url('dashboard.php'));
         } catch (Exception $e) {
             $conn->rollBack();
@@ -199,7 +198,7 @@ require_once __DIR__ . '/../includes/header.php';
                     
                     <?php foreach ($cartItems as $item): ?>
                         <div class="d-flex mb-3">
-                            <img src="/assets/products/<?php echo $item['main_image']; ?>" 
+                            <img src="<?php echo htmlspecialchars(resolve_product_image($item['main_image'], $item['name'])); ?>" 
                                  alt="<?php echo htmlspecialchars($item['name']); ?>"
                                  style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;"
                                  onerror="this.src='https://via.placeholder.com/60'">

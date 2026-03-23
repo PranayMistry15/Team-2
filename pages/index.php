@@ -3,10 +3,44 @@
 $pageTitle = 'Laptro - Premium Laptops for Tech Students';
 require_once __DIR__ . '/../includes/header.php';
 
-// Get featured products
+// Get featured products 
 $conn = getDBConnection();
-$stmt = $conn->query("SELECT * FROM products WHERE is_featured = 1 LIMIT 6");
+$stmt = $conn->query("SELECT * FROM products WHERE is_featured = 1 ORDER BY created_at DESC LIMIT 6");
 $featuredProducts = $stmt->fetchAll();
+$serviceSummary = getServiceRatingSummary();
+$recentServiceReviews = getRecentServiceReviews(3);
+$homeCategories = [
+    [
+        'slug' => 'high-speed',
+        'title' => 'High Performance',
+        'description' => 'For coding, creative work, and heavier software.',
+        'icon' => 'fa-bolt'
+    ],
+    [
+        'slug' => 'portable',
+        'title' => 'Portable',
+        'description' => 'Lightweight laptops for moving between classes.',
+        'icon' => 'fa-briefcase'
+    ],
+    [
+        'slug' => 'gaming',
+        'title' => 'Gaming',
+        'description' => 'Strong graphics and extra power for demanding tasks.',
+        'icon' => 'fa-gamepad'
+    ],
+    [
+        'slug' => 'business',
+        'title' => 'Business',
+        'description' => 'Reliable laptops for productivity and longer sessions.',
+        'icon' => 'fa-chart-line'
+    ],
+    [
+        'slug' => 'budget',
+        'title' => 'Budget Friendly',
+        'description' => 'Good everyday options at a lower price point.',
+        'icon' => 'fa-tags'
+    ],
+];
 ?>
 
 <section class="hero">
@@ -78,7 +112,29 @@ $featuredProducts = $stmt->fetchAll();
         </div>
     </section>
 
-<section class="section-padding">
+<section class="section-padding" style="background-color: var(--off-white);">
+    <div class="container">
+        <div class="text-center mb-5">
+            <h2>Shop by Category</h2>
+            <p class="text-muted">Choose a category to jump straight to the right products.</p>
+        </div>
+        <div class="row g-4">
+            <?php foreach ($homeCategories as $categoryItem): ?>
+                <div class="col-md-6 col-lg">
+                    <a href="<?php echo url('products.php?category=' . urlencode($categoryItem['slug'])); ?>" class="category-card">
+                        <div class="category-card-icon">
+                            <i class="fas <?php echo htmlspecialchars($categoryItem['icon']); ?>"></i>
+                        </div>
+                        <h3><?php echo htmlspecialchars($categoryItem['title']); ?></h3>
+                        <p><?php echo htmlspecialchars($categoryItem['description']); ?></p>
+                    </a>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+
+<section class="section-padding home-featured">
     <div class="container">
         <div class="text-center mb-5">
             <h2>Featured Laptops</h2>
@@ -87,13 +143,16 @@ $featuredProducts = $stmt->fetchAll();
         
         <div class="row g-4">
             <?php foreach ($featuredProducts as $product): 
+                $needsZoomOut = in_array($product['name'], ['Alienware 18 Area-51', 'Microsoft Surface Pro 9'], true);
                 $rating = getAverageRating($product['id']);
+                $stockMeta = stock_status_meta($product['stock'] ?? 0);
             ?>
                 <div class="col-md-6 col-lg-4">
-                    <div class="product-card fade-in">
+                    <div class="product-card fade-in<?php echo $needsZoomOut ? ' zoom-out-card' : ''; ?>">
                         <a href="<?php echo url('product.php?id=' . $product['id']); ?>">
-                            <img src="<?php echo asset('products/' . $product['main_image']); ?>" loading="lazy" width="400" height="300"
+                            <img src="<?php echo htmlspecialchars(resolve_product_image($product['main_image'], $product['name'])); ?>" loading="lazy" width="400" height="300"
                                  alt="<?php echo htmlspecialchars($product['name']); ?>"
+                                 class="product-card-img<?php echo $needsZoomOut ? ' zoom-out-img' : ''; ?>"
                                  onerror="this.src='<?php echo asset('images/hero-laptop-1.jpg'); ?>'">
                         </a>
                         <div class="product-card-body">
@@ -111,6 +170,11 @@ $featuredProducts = $stmt->fetchAll();
                                 <?php echo renderStars($rating['average']); ?>
                                 <span class="text-muted ms-2">(<?php echo $rating['total']; ?>)</span>
                             </div>
+                            <div class="product-stock-badge">
+                                <span class="badge badge-<?php echo htmlspecialchars($stockMeta['class']); ?>">
+                                    <?php echo htmlspecialchars($stockMeta['label']); ?>
+                                </span>
+                            </div>
                             <div class="d-flex justify-content-between align-items-center mt-3">
                                 <div class="product-price"><?php echo formatPrice($product['price']); ?></div>
                                 <a href="<?php echo url('product.php?id=' . $product['id']); ?>" class="btn btn-outline btn-sm">View Details</a>
@@ -124,6 +188,41 @@ $featuredProducts = $stmt->fetchAll();
         <div class="text-center mt-5">
             <a href="<?php echo url('products.php'); ?>" class="btn btn-primary">View All Laptops</a>
         </div>
+    </div>
+</section>
+
+<section class="section-padding">
+    <div class="container">
+        <div class="text-center mb-5">
+            <h2>Service Reviews</h2>
+            <?php if ($serviceSummary['total'] > 0): ?>
+                <div class="product-rating d-flex justify-content-center align-items-center gap-2">
+                    <?php echo renderStars($serviceSummary['average']); ?>
+                    <span class="text-muted"><?php echo $serviceSummary['average']; ?>/5 from <?php echo $serviceSummary['total']; ?> review<?php echo $serviceSummary['total'] === 1 ? '' : 's'; ?></span>
+                </div>
+            <?php else: ?>
+                <p class="text-muted">No service reviews yet.</p>
+            <?php endif; ?>
+        </div>
+
+        <?php if ($recentServiceReviews): ?>
+            <div class="row g-4">
+                <?php foreach ($recentServiceReviews as $serviceReview): ?>
+                    <div class="col-md-4">
+                        <div class="review-card h-100">
+                            <div class="review-header">
+                                <div>
+                                    <div class="reviewer-name"><?php echo htmlspecialchars($serviceReview['user_name']); ?></div>
+                                    <div class="product-rating"><?php echo renderStars($serviceReview['rating']); ?></div>
+                                </div>
+                                <div class="review-date"><?php echo date('M d, Y', strtotime($serviceReview['updated_at'])); ?></div>
+                            </div>
+                            <p class="mb-0"><?php echo nl2br(htmlspecialchars($serviceReview['comment'])); ?></p>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     </div>
 </section>
 
