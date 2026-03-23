@@ -1,7 +1,9 @@
 <?php
 
 $pageTitle = 'Admin Dashboard - Laptro';
-require_once '../includes/header.php';
+require_once '../includes/config.php';
+require_once '../includes/functions.php';
+require_once '../includes/url-helper.php';
 
 // Check admin access
 if (!isAdmin()) {
@@ -20,7 +22,7 @@ $salesStats = $stmt->fetch();
 $stmt = $conn->query("SELECT orders.*, users.name as customer_name, users.email as customer_email FROM orders JOIN users ON orders.user_id = users.id  ORDER BY orders.created_at DESC LIMIT 10");
 $recentOrders = $stmt->fetchAll();
 
-// Get new user registrations (last 30 days)
+// Get new user registrations u forgot to do this bro
 $stmt = $conn->query("SELECT COUNT(*) as new_users FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND is_admin = 0");
 $newUsersStats = $stmt->fetch();
 
@@ -34,7 +36,10 @@ $lowStockProducts = $stmt->fetchAll();
 
 // Get popular products (most ordered)
 $stmt = $conn->query("SELECT products.*, COUNT(order_items.id) as order_count FROM products JOIN order_items ON products.id = order_items.product_id GROUP BY products.id ORDER BY order_count DESC LIMIT 5");
-$popularProducts = $stmt->fetchAll();?>
+$popularProducts = $stmt->fetchAll();
+
+require_once '../includes/header.php';
+?>
 
 
 
@@ -49,6 +54,12 @@ $popularProducts = $stmt->fetchAll();?>
         <a class="nav-link" href="<?php echo url('admin/products.php'); ?>">
             <i class="fas fa-laptop me-2"></i>Products
         </a>
+        <a class="nav-link" href="<?php echo url('admin/stock-receipts.php'); ?>">
+            <i class="fas fa-boxes-stacked me-2"></i>Stock In
+        </a>
+        <a class="nav-link" href="<?php echo url('admin/inventory-reports.php'); ?>">
+            <i class="fas fa-chart-column me-2"></i>Reports
+        </a>
         <a class="nav-link" href="<?php echo url('admin/orders.php'); ?>">
             <i class="fas fa-shopping-bag me-2"></i>Orders
         </a>
@@ -57,6 +68,9 @@ $popularProducts = $stmt->fetchAll();?>
         </a>
         <a class="nav-link" href="<?php echo url('admin/returns.php'); ?>">
             <i class="fas fa-undo me-2"></i>Returns
+        </a>
+        <a class="nav-link" href="<?php echo url('admin/assistance.php'); ?>">
+            <i class="fas fa-headset me-2"></i>Assistance
         </a>
         <hr style="border-color: #666;">
         <a class="nav-link" href="<?php echo url('index.php'); ?>">
