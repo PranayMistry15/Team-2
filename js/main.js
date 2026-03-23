@@ -1,4 +1,6 @@
-// Slider (guard when not present)
+
+
+// Slider 
     const slides = document.querySelectorAll('.hero-slide');
     const indicators = document.querySelectorAll('.slider-indicator');
     let currentSlide = 0;
@@ -157,6 +159,53 @@ class AdminSidebar {
     }
 }
 
+class DashboardSections {
+    constructor() {
+        this.links = document.querySelectorAll('[data-dashboard-link]');
+        this.panels = document.querySelectorAll('[data-dashboard-panel]');
+        this.init();
+    }
+
+    init() {
+        if (!this.links.length || !this.panels.length) return;
+
+        this.links.forEach((link) => {
+            link.addEventListener('click', (e) => {
+                const target = link.getAttribute('data-dashboard-link');
+                if (!target) return;
+                e.preventDefault();
+                this.showPanel(target, true, false);
+            });
+        });
+
+        const initial = (window.location.hash || '#overview').replace(/^#/, '') || 'overview';
+        this.showPanel(initial, false);
+
+        window.addEventListener('hashchange', () => {
+            const hash = (window.location.hash || '#overview').replace(/^#/, '') || 'overview';
+            this.showPanel(hash, false);
+        });
+    }
+
+    showPanel(target, updateHash) {
+        const panel = document.getElementById(target) || document.getElementById('overview');
+        const activeId = panel ? panel.id : 'overview';
+
+        this.panels.forEach((item) => {
+            item.classList.toggle('is-active', item.id === activeId);
+        });
+
+        this.links.forEach((link) => {
+            link.classList.toggle('active', link.getAttribute('data-dashboard-link') === activeId);
+        });
+
+        if (updateHash) {
+            const nextUrl = `${window.location.pathname}#${activeId}`;
+            window.history.replaceState(null, '', nextUrl);
+        }
+    }
+}
+
 // On DOM load 
 (function(){
 const init = () => {
@@ -166,14 +215,14 @@ const init = () => {
             if (heroSliderEl) new HeroSlider(heroSliderEl);
         }
     } catch (e) {
-        // ignore 
     }
 
     try { new ViewToggle(); } catch(e){}
     try { new LoginTabs(); } catch(e){}
     try { new AdminSidebar(); } catch(e){}
+    try { new DashboardSections(); } catch(e){}
 
-    // Fallback 
+    // fallback for bootstrap because sometimes the close buttons break
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('.btn-close');
         if (btn && btn.closest('.alert')) {
@@ -187,7 +236,7 @@ const init = () => {
         }
     });
 
-    // Fallback
+    // just a fallback I added
     document.querySelectorAll('img[data-fallback]').forEach(img => {
         img.addEventListener('error', () => {
             if (!img.dataset.fallbackApplied) {
@@ -197,7 +246,7 @@ const init = () => {
         }, { once: false });
     });
 
-    // Confirm actions
+    // Confirm actions 
     document.addEventListener('click', (e) => {
         const el = e.target.closest('[data-confirm]');
         if (el && el.tagName === 'A') {
@@ -208,7 +257,7 @@ const init = () => {
         }
     });
 
-    // Toggle order details 
+    // Toggle order details
     document.addEventListener('click', (e) => {
         const t = e.target.closest('[data-toggle-order-details]');
         if (!t) return;
@@ -217,9 +266,83 @@ const init = () => {
         const row = document.getElementById('order-' + id);
         if (!row) return;
         e.preventDefault();
+        const scrollY = window.scrollY;
         const isHidden = row.style.display === 'none' || getComputedStyle(row).display === 'none';
         row.style.display = isHidden ? 'table-row' : 'none';
+        t.blur();
+        window.scrollTo({ top: scrollY, behavior: 'auto' });
     });
+
+    // Password visibility 
+    document.querySelectorAll('[data-password-toggle]').forEach(btn => {
+        const targetId = btn.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        if (!input) return;
+
+        btn.addEventListener('mousedown', (e) => e.preventDefault()); 
+
+        btn.addEventListener('click', () => {
+            const showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            btn.setAttribute('aria-pressed', showing ? 'false' : 'true');
+            btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+            const icon = btn.querySelector('i');
+            if (icon) {
+                icon.classList.toggle('fa-eye');
+                icon.classList.toggle('fa-eye-slash');
+            }
+            const pos = input.value.length;
+            input.focus({ preventScroll: true });
+            try { input.setSelectionRange(pos, pos); } catch (e) {}
+        });
+    });
+
+    // Password requirements
+    const pwdInput = document.getElementById('reg_password');
+    const reqContainer = document.getElementById('pwd_help');
+    if (pwdInput && reqContainer) {
+        const rules = {
+            len: v => v.length >= 6,
+            upper: v => /[A-Z]/.test(v),
+            lower: v => /[a-z]/.test(v),
+            digit: v => /\d/.test(v),
+        };
+        const update = () => {
+            const val = pwdInput.value || '';
+            reqContainer.querySelectorAll('[data-pwd-rule]').forEach(el => {
+                const key = el.getAttribute('data-pwd-rule');
+                const ok = rules[key] ? rules[key](val) : false;
+                el.classList.toggle('text-success', ok);
+                el.classList.toggle('text-muted', !ok);
+                const icon = el.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('fa-circle', !ok);
+                    icon.classList.toggle('fa-check-circle', ok);
+                }
+            });
+        };
+        pwdInput.addEventListener('input', update);
+        update();
+    }
+
+    // Toggle admin signup code field
+    const accountTypeInput = document.getElementById('account_type');
+    const adminCodeWrap = document.getElementById('admin-signup-code-wrap');
+    const adminCodeInput = document.getElementById('admin_signup_code');
+    if (accountTypeInput && adminCodeWrap) {
+        const updateAdminCodeVisibility = () => {
+            const isAdmin = accountTypeInput.value === 'admin';
+            adminCodeWrap.hidden = !isAdmin;
+            if (adminCodeInput) {
+                adminCodeInput.required = isAdmin;
+                if (!isAdmin) {
+                    adminCodeInput.value = '';
+                }
+            }
+        };
+        accountTypeInput.addEventListener('change', updateAdminCodeVisibility);
+        updateAdminCodeVisibility();
+    }
 };
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
